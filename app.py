@@ -227,6 +227,99 @@ def logout():
     return redirect("/")
 
 
+@app.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    """Change password or delete account"""
+    
+    # User reached route via POST (as by submitting a form via POST)
+    if request.method == "POST":
+        action = request.form.get("action")
+        
+        # Handle account deletion
+        if action == "delete_account":
+            # Ensure password was submitted for confirmation
+            if not request.form.get("delete_password"):
+                return apology("must provide password to delete account", 400)
+            
+            # Get user's current password hash
+            user = db.execute("SELECT hash FROM users WHERE id = ?", session["user_id"])
+            if not user:
+                return apology("user not found", 400)
+            
+            current_hash = user[0]["hash"]
+            delete_password = request.form.get("delete_password")
+            
+            # Check if password is correct
+            if not check_password_hash(current_hash, delete_password):
+                return apology("password is incorrect", 400)
+            
+            # Delete all user's transactions
+            db.execute("DELETE FROM transactions WHERE user_id = ?", session["user_id"])
+            
+            # Delete user account
+            db.execute("DELETE FROM users WHERE id = ?", session["user_id"])
+            
+            # Clear session
+            session.clear()
+            
+            # Flash success message
+            flash("Account deleted successfully!")
+            
+            # Redirect to registration page
+            return redirect("/register")
+        
+        # Handle password change
+        else:
+            # Ensure current password was submitted
+            if not request.form.get("current_password"):
+                return apology("must provide current password", 400)
+            
+            # Ensure new password was submitted
+            if not request.form.get("new_password"):
+                return apology("must provide new password", 400)
+            
+            # Ensure confirmation was submitted
+            if not request.form.get("confirmation"):
+                return apology("must provide password confirmation", 400)
+            
+            # Get user's current password hash
+            user = db.execute("SELECT hash FROM users WHERE id = ?", session["user_id"])
+            if not user:
+                return apology("user not found", 400)
+            
+            current_hash = user[0]["hash"]
+            current_password = request.form.get("current_password")
+            new_password = request.form.get("new_password")
+            confirmation = request.form.get("confirmation")
+            
+            # Check if current password is correct
+            if not check_password_hash(current_hash, current_password):
+                return apology("current password is incorrect", 400)
+            
+            # Ensure new password and confirmation match
+            if new_password != confirmation:
+                return apology("new passwords do not match", 400)
+            
+            # Update password in database
+            new_hash = generate_password_hash(new_password)
+            db.execute(
+                "UPDATE users SET hash = ? WHERE id = ?",
+                new_hash,
+                session["user_id"]
+            )
+            
+            # Flash success message
+            flash("Password changed successfully!")
+            
+            # Redirect to home page
+            return redirect("/")
+    
+    # User reached route via GET (as by clicking a link or via redirect)
+    else:
+        return render_template("profile.html")
+
+
 @app.route("/quote", methods=["GET", "POST"])
 @login_required
 def quote():
