@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
+import re
 
 
 class Database:
@@ -13,6 +14,39 @@ class Database:
             connection_string: Database connection string (e.g., "sqlite:///finance.db")
         """
         self.engine = create_engine(connection_string, echo=False)
+    
+    def _convert_query(self, query, args):
+        """
+        Convert SQL query with ? placeholders to SQLAlchemy named parameters.
+        
+        Args:
+            query: SQL query with ? placeholders
+            args: Tuple of parameter values
+            
+        Returns:
+            Tuple of (converted_query, params_dict)
+        """
+        if not args:
+            return query, {}
+        
+        # Replace ? with :param1, :param2, etc.
+        param_dict = {}
+        param_index = 1
+        
+        def replace_placeholder(match):
+            nonlocal param_index
+            param_name = f"param{param_index}"
+            param_index += 1
+            return f":{param_name}"
+        
+        # Replace ? placeholders with named parameters
+        converted_query = re.sub(r'\?', replace_placeholder, query)
+        
+        # Create parameter dictionary
+        for i, arg in enumerate(args, start=1):
+            param_dict[f"param{i}"] = arg
+        
+        return converted_query, param_dict
     
     def execute(self, query, *args):
         """
@@ -35,14 +69,11 @@ class Database:
         
         with self.engine.connect() as conn:
             try:
+                # Convert ? placeholders to named parameters for SQLAlchemy
+                converted_query, params = self._convert_query(query, args)
+                
                 # Execute query with parameters
-                # SQLAlchemy text() with ? placeholders requires parameters as tuple/list
-                if args:
-                    # Convert args tuple to list for SQLAlchemy
-                    # SQLAlchemy expects parameters as a sequence for ? placeholders
-                    result = conn.execute(text(query), list(args))
-                else:
-                    result = conn.execute(text(query))
+                result = conn.execute(text(converted_query), params)
                 
                 # Commit transaction
                 conn.commit()
